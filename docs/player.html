@@ -152,6 +152,9 @@
           history.replaceState(null, '', `${location.pathname}?${playerOptions}${location.hash}`);
         }
         const reloadEngine = Number(playerOptions.get('launch') || 0) > 0;
+        // This dedicated CD test uses CD audio and software AdLib, never an
+        // external MIDI device. Avoid waiting on an unrelated MIDI permission.
+        globalThis.midiOutputMap = new Map();
         const isIos = /iP(?:hone|ad|od)/i.test(navigator.userAgent)
           || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
         const fixedConfig = `[scummvm]

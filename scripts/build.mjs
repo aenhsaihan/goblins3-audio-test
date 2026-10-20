@@ -10,6 +10,7 @@ const source=await readFile(path.join(root,'src/cd-library.ts'),'utf8');
 const result=ts.transpileModule(source,{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.ES2022}});
 await writeFile(path.join(root,'docs/cd-library.js'),result.outputText.replace("from 'fflate'","from './vendor/fflate.js'"));
 await copyFile(path.resolve(path.dirname(require.resolve('fflate')),'../esm/browser.js'),path.join(root,'docs/vendor/fflate.js'));
+await copyFile(path.resolve(path.dirname(require.resolve('fflate')),'../LICENSE'),path.join(root,'docs/vendor/fflate-LICENSE.txt'));
 await writeFile(path.join(root,'docs/.nojekyll'),'');
 const indexPath=path.join(root,'docs/data/index.json');
 const index=JSON.parse(await readFile(indexPath,'utf8'));

@@ -23,6 +23,7 @@ function load(timing){
 }
 test('candidate engine is selected under the repository path and timing fix is activated',()=>{const p=load('fixed');assert.match(p.document.script.src,/^\/goblins3-audio-test\/engine\/7eeac96190be191e\/scummvm.js$/);assert.match(p.context.rewritten,/service_timers=1/);});
 test('comparison uses unchanged stable bytes, not the candidate engine',()=>{const p=load('baseline');assert.match(p.document.script.src,/\/621b8bfb41a16f19\/scummvm.js$/);assert.equal(p.context.rewritten,undefined);});
+test('CD/AdLib startup skips unrelated external MIDI enumeration',()=>{const p=load('fixed');assert.equal(p.context.midiOutputMap.size,0);});
 test('virtual data requests map to the project subpath, not the account root',async()=>{const p=load('fixed');await p.window.fetch('/data/index.json');assert.equal(p.fetches[0].input,'https://example.github.io/goblins3-audio-test/data/index.json');});
 test('test CD storage is isolated and the catalog does not call the working site',()=>{
  assert.match(readFileSync(new URL('docs/cd-library.js',root),'utf8'),/goblins3-audio-test-cd-library/);

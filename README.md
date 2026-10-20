@@ -23,6 +23,8 @@ make -j8
 
 The candidate is the **exact measured** pair, not a newly recompiled release. Dormant trace hooks remain in it; this player does not enable `Module.audioTrace`. Its timer fix is activated by `service_timers=1`, set by the candidate player before starting the engine. No decoder or audio speed changes are made.
 
+External Web MIDI enumeration is skipped in this dedicated CD/AdLib test so startup cannot wait on an unrelated device-permission prompt. CD music, embedded speech and software AdLib do not use an external MIDI device.
+
 Candidate SHA-256: JS `41a8319a4999f486b4883e11f3797f7e915aeee0f0f256fb79bfd177583999b7`; WASM `7eeac96190be191ec3f87f62ec1a1987660fe4862b1cbe93f7e697796f3c8b42`.
 
 Stable SHA-256: JS `fb05b5483d214e5763ebbed90689d446c0a019d8982cce60367c908caab9739f`; WASM `621b8bfb41a16f19073853733e43d5323facf485e6f4d6ee465d0264f40913f9`.
