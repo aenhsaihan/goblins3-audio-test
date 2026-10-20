@@ -1,0 +1,9 @@
+node_modules/
+.DS_Store
+test-results/
+*.zip
+!docs/data/*.zip
+*.ITK
+*.STK
+*.IMD
+track*.ogg

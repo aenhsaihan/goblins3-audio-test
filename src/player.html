@@ -1,0 +1,816 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no" />
+    <meta name="theme-color" content="#000000" />
+    <title>Goblins Quest 3 — browser player</title>
+    <style>
+      :root { color-scheme: dark; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+      * {
+        box-sizing: border-box; -webkit-tap-highlight-color: transparent;
+        -webkit-touch-callout: none; -webkit-user-select: none; user-select: none;
+      }
+      html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; background: #000; touch-action: none; }
+      body { position: relative; }
+      canvas {
+        position: absolute; inset: 0; display: block; width: 100%; height: 100%; border: 0;
+        background: #000; outline: none; image-rendering: auto; touch-action: none;
+        -webkit-touch-callout: none; -webkit-user-select: none; user-select: none;
+      }
+      #output { position: fixed; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+      #download-modal { display: none; position: absolute; inset: auto 1rem 1rem; z-index: 4; }
+      #status {
+        position: absolute; inset: 0; z-index: 5; display: grid; place-items: center;
+        background: radial-gradient(circle at 50% 42%, #1d1711, #050404 68%);
+        transition: opacity 260ms ease;
+      }
+      #status.hidden { opacity: 0; pointer-events: none; }
+      .status-box { width: min(23rem, calc(100% - 3rem)); text-align: center; color: #e8dfc5; }
+      .status-mark {
+        display: grid; place-items: center; width: 3.25rem; height: 3.25rem; margin: 0 auto 1rem;
+        border: 1px solid rgba(241,199,91,.32); border-radius: 50%; color: #f1c75b; font-size: 1.25rem;
+        animation: throb 1.2s ease-in-out infinite alternate;
+      }
+      #status-text { margin: 0; font-size: .75rem; line-height: 1.5; letter-spacing: .08em; text-transform: uppercase; }
+      #progress { width: 100%; height: 3px; margin-top: 1rem; overflow: hidden; background: #241d17; }
+      #progress > i { display: block; width: 12%; height: 100%; background: #f1c75b; transition: width 180ms ease; }
+      #controls {
+        position: absolute; z-index: 6; right: max(.6rem, env(safe-area-inset-right));
+        bottom: max(.6rem, env(safe-area-inset-bottom)); display: flex; gap: .45rem;
+        transition: opacity 180ms ease;
+      }
+      .control {
+        min-height: 2.6rem; border: 1px solid rgba(255,255,255,.2); border-radius: .42rem; padding: .55rem .75rem;
+        background: rgba(10,8,7,.78); color: #f5edda; font: 600 .64rem/1 ui-monospace, monospace;
+        letter-spacing: .08em; text-transform: uppercase; backdrop-filter: blur(10px); touch-action: manipulation;
+      }
+      .control:active { background: rgba(241,199,91,.25); transform: translateY(1px); }
+      #pan-controls { position: absolute; inset: 0; z-index: 7; display: none; pointer-events: none; }
+      .pan-control {
+        position: absolute; top: 43%; display: grid; width: 2.65rem; height: 4.8rem;
+        place-items: center; transform: translateY(-50%); pointer-events: auto;
+        border: 1px solid rgba(255,255,255,.17); border-radius: .55rem;
+        background: rgba(10,8,7,.5); color: rgba(255,247,218,.78);
+        font: 600 1.45rem/1 ui-monospace, monospace; backdrop-filter: blur(8px);
+        touch-action: none; opacity: .48; transition: opacity 120ms ease, background 120ms ease;
+      }
+      .pan-control.is-active {
+        opacity: 1; background: rgba(241,199,91,.3); color: #fff4c9;
+        box-shadow: 0 0 20px rgba(241,199,91,.14);
+      }
+      #pan-left { left: max(.45rem, env(safe-area-inset-left)); }
+      #pan-right { right: max(.45rem, env(safe-area-inset-right)); }
+      html.standalone #fullscreen { display: none; }
+      html.standalone #controls {
+        top: max(.45rem, env(safe-area-inset-top)); bottom: auto; opacity: .42;
+      }
+      html.standalone .control { min-height: 2.15rem; padding: .45rem .6rem; }
+      #rotate-tip {
+        display: none; position: absolute; z-index: 7; left: 50%; bottom: 4.1rem; transform: translateX(-50%);
+        border: 1px solid rgba(241,199,91,.22); border-radius: .4rem; padding: .55rem .7rem;
+        background: rgba(10,8,7,.84); color: #cabfae; font-size: .6rem; text-align: center; white-space: nowrap;
+      }
+      @media (orientation: portrait) and (max-width: 720px) { #rotate-tip { display: block; } }
+      @media (orientation: landscape) and (max-height: 760px) {
+        body.ready #pan-controls { display: block; }
+        canvas {
+          left: max(.4rem, env(safe-area-inset-left));
+          right: max(.4rem, env(safe-area-inset-right));
+          width: calc(
+            100% - max(.4rem, env(safe-area-inset-left)) - max(.4rem, env(safe-area-inset-right))
+          );
+        }
+      }
+      @media (hover: hover) and (pointer: fine) { #controls { opacity: .45; } #controls:hover { opacity: 1; } }
+      @keyframes throb { to { transform: scale(1.08); box-shadow: 0 0 26px rgba(241,199,91,.17); } }
+      @media (prefers-reduced-motion: reduce) { .status-mark { animation: none; } }
+    </style>
+  </head>
+  <body>
+    <canvas id="canvas" tabindex="0" aria-label="Goblins Quest 3 game canvas"></canvas>
+    <textarea id="output" aria-hidden="true"></textarea>
+    <div id="download-modal" aria-hidden="true">
+      <div id="download-modal-title"><h3>Loading ScummVM…</h3></div>
+      <div id="download-modal-content">
+        <div id="download-modal-progress"><div id="download-modal-progress-fill"></div></div>
+        <p id="download-modal-progress-text">Downloaded 0 KB</p>
+        <p id="download-modal-speed-text">Download speed: 0 MB/s</p>
+      </div>
+    </div>
+    <div id="status" role="status" aria-live="polite">
+      <div class="status-box">
+        <div class="status-mark">G3</div>
+        <p id="status-text">Loading the ScummVM engine…</p>
+        <div id="progress"><i></i></div>
+      </div>
+    </div>
+    <div id="rotate-tip">Rotate your phone for the full view</div>
+    <div id="pan-controls" aria-label="Camera pan controls">
+      <button class="pan-control" id="pan-left" type="button" aria-label="Tap to pan camera left">‹</button>
+      <button class="pan-control" id="pan-right" type="button" aria-label="Tap to pan camera right">›</button>
+    </div>
+    <div id="controls" aria-label="Game controls">
+      <button class="control" id="sound" type="button">Sound</button>
+      <button class="control" id="fullscreen" type="button">Full screen</button>
+    </div>
+
+    <script>
+      (() => {
+        const canvas = document.getElementById('canvas');
+        const status = document.getElementById('status');
+        const statusText = document.getElementById('status-text');
+        const progress = document.querySelector('#progress > i');
+        const output = document.getElementById('output');
+        const parentOrigin = location.origin;
+        let lastPointer = { x: innerWidth / 2, y: innerHeight / 2 };
+        let playerReady = false;
+        let panTimer = 0;
+        let panStopTimer = 0;
+        let panDirection = 0;
+        let panTick = 0;
+        const edition = new URLSearchParams(location.search).get('edition') === 'cd' ? 'cd' : 'demo';
+        const isCdEdition = edition === 'cd';
+        const demoDirectory = '/games/gob3-dos-demo-en';
+        const cdDirectory = '/games/gob3-cd';
+        const demoFiles = [
+          '2.exe', '2.txt', 'all.ask', 'cat.inf', 'cd.cfg', 'gob3.exe',
+          'imd.itk', 'imd.ltk', 'intro.stk', 'mdo.cfg', 'mdo.def', 'setup.exe'
+        ];
+        const playerOptions = new URLSearchParams(location.search);
+        // The tested v22 pair is immutable and ships with this site. Never mix
+        // an independently cached script and a moving mirror's WebAssembly.
+        const siteBase = new URL('./', location.href);
+        const baseline = playerOptions.get('timing') === 'baseline';
+        const runtimeBase = new URL(baseline
+          ? 'engine/621b8bfb41a16f19/'
+          : 'engine/7eeac96190be191e/', siteBase).pathname;
+        // Keep the exact measured candidate bytes. Its timer experiment is
+        // query-gated, so activate it before the engine starts.
+        if (!baseline) {
+          playerOptions.set('service_timers', '1');
+          history.replaceState(null, '', `${location.pathname}?${playerOptions}${location.hash}`);
+        }
+        const reloadEngine = Number(playerOptions.get('launch') || 0) > 0;
+        const isIos = /iP(?:hone|ad|od)/i.test(navigator.userAgent)
+          || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+        const fixedConfig = `[scummvm]
+versioninfo=2.10.0git
+always_run_fallback_detection_extern=false
+gui_browser_native=false
+music_driver=adlib
+savepath=/home/web_user
+touch_mode_menus=mouse
+touch_mode_2d_games=mouse
+touch_mode_3d_games=mouse
+onscreen_control=false
+`;
+        let lastHttpFailure = '';
+
+        // SDL3's WebAssembly backend mixes sound inside a deprecated
+        // ScriptProcessor callback on the browser's main thread. A demanding
+        // Goblins 3 cutscene can delay that callback long enough for iOS to
+        // underrun and emit crackling or silence. For the opt-in iOS pipeline,
+        // replace only playback ScriptProcessors with a small ahead-of-time
+        // queue of native AudioBufferSource nodes. ScummVM still performs all
+        // decoding and mixing; Web Audio merely keeps roughly 320 ms ready so
+        // a slow animation frame cannot starve the speaker.
+        const installIosAudioQueue = () => {
+          const audioPipeline = playerOptions.get('audio_pipeline');
+          const forcedTest = audioPipeline === 'queued-test';
+          if (audioPipeline !== 'queued' && !forcedTest) return;
+          if (!isIos && !forcedTest) return;
+
+          const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+          const prototype = AudioContextClass && AudioContextClass.prototype;
+          const nativeCreateScriptProcessor = prototype && prototype.createScriptProcessor;
+          if (!nativeCreateScriptProcessor || nativeCreateScriptProcessor.__gob3QueuedAudio) return;
+
+          const createQueuedProcessor = function(bufferSize, inputChannels, outputChannels) {
+            if (inputChannels || !outputChannels || !bufferSize) {
+              return nativeCreateScriptProcessor.call(this, bufferSize, inputChannels, outputChannels);
+            }
+
+            const context = this;
+            const outputNode = context.createGain();
+            const scheduledSources = new Set();
+            const scheduleAheadSeconds = 0.32;
+            const initialLeadSeconds = 0.12;
+            let audioProcess = null;
+            let connected = false;
+            let nextPlayTime = 0;
+            let pumpTimer = 0;
+
+            const processor = {
+              get bufferSize() {
+                return bufferSize;
+              },
+              get onaudioprocess() {
+                return audioProcess;
+              },
+              set onaudioprocess(callback) {
+                audioProcess = typeof callback === 'function' ? callback : null;
+              },
+              connect(destination) {
+                if (connected) return destination;
+                connected = true;
+                outputNode.connect(destination);
+                nextPlayTime = 0;
+                pump();
+                pumpTimer = window.setInterval(pump, 24);
+                context.addEventListener('statechange', pump);
+                output.value += `iOS queued audio enabled: ${bufferSize} frames, ${Math.round(scheduleAheadSeconds * 1000)} ms reserve.\n`;
+                return destination;
+              },
+              disconnect() {
+                connected = false;
+                if (pumpTimer) window.clearInterval(pumpTimer);
+                pumpTimer = 0;
+                context.removeEventListener('statechange', pump);
+                for (const source of scheduledSources) {
+                  try { source.stop(); } catch (_) {}
+                  try { source.disconnect(); } catch (_) {}
+                }
+                scheduledSources.clear();
+                try { outputNode.disconnect(); } catch (_) {}
+              },
+            };
+
+            function pump() {
+              if (!connected || context.state !== 'running' || typeof audioProcess !== 'function') return;
+
+              if (nextPlayTime < context.currentTime + 0.02) {
+                nextPlayTime = context.currentTime + initialLeadSeconds;
+              }
+
+              const targetTime = context.currentTime + scheduleAheadSeconds;
+              let generated = 0;
+              while (nextPlayTime < targetTime && generated < 8) {
+                const audioBuffer = context.createBuffer(
+                  outputChannels,
+                  bufferSize,
+                  context.sampleRate,
+                );
+
+                try {
+                  audioProcess.call(processor, {
+                    inputBuffer: null,
+                    outputBuffer: audioBuffer,
+                    playbackTime: nextPlayTime,
+                  });
+                } catch (error) {
+                  console.error('Queued audio mix failed:', error);
+                  processor.disconnect();
+                  return;
+                }
+
+                const source = context.createBufferSource();
+                source.buffer = audioBuffer;
+                source.connect(outputNode);
+                source.addEventListener('ended', () => {
+                  scheduledSources.delete(source);
+                  try { source.disconnect(); } catch (_) {}
+                }, { once: true });
+                source.start(nextPlayTime);
+                scheduledSources.add(source);
+                nextPlayTime += audioBuffer.duration;
+                generated += 1;
+              }
+            }
+
+            return processor;
+          };
+
+          createQueuedProcessor.__gob3QueuedAudio = true;
+          prototype.createScriptProcessor = createQueuedProcessor;
+        };
+
+        installIosAudioQueue();
+
+        // Keep every demo-data request on this origin. This avoids mobile
+        // privacy relays and cross-origin range-request handling differences.
+        // The rewrite also protects returning visitors whose browser cached
+        // the older catalog response with the third-party mirror URL.
+        const nativeFetch = window.fetch.bind(window);
+        const demoMirrorOrigin = 'https://scummvm-data.kuendig.io';
+        const demoMirrorPath = '/gob3-dos-demo-en/';
+        const publishedGameOrigin = 'https://goblins-3-web.blackbrush12.chatgpt.site';
+        window.fetch = (input, init) => {
+          const inputUrl = typeof input === 'string'
+            ? input
+            : input instanceof Request
+              ? input.url
+              : null;
+          if (!inputUrl) return nativeFetch(input, init);
+          const fetchRewritten = (url) =>
+            typeof input === 'string'
+              ? nativeFetch(url.href, init)
+              : nativeFetch(new Request(url.href, input), init);
+
+          const url = new URL(inputUrl, location.href);
+          if (url.origin === location.origin && url.pathname.startsWith('/data/')) {
+            url.pathname = siteBase.pathname + url.pathname.slice(1);
+            return fetchRewritten(url);
+          }
+          if (url.origin === location.origin && url.pathname.startsWith(runtimeBase)) {
+            notify('status', `Loading the bundled game engine${url.pathname.endsWith('.wasm') ? ' (WebAssembly)' : ''}…`);
+            if (reloadEngine) return nativeFetch(input, { ...init, cache: 'reload' });
+          }
+          if (url.origin === publishedGameOrigin && url.pathname.startsWith('/game-v5/')) {
+            url.protocol = location.protocol;
+            url.host = location.host;
+            return fetchRewritten(url);
+          }
+
+          if (url.origin === demoMirrorOrigin && url.pathname.startsWith(demoMirrorPath)) {
+            url.protocol = location.protocol;
+            url.host = location.host;
+            url.pathname = `/game-v5${url.pathname}`;
+            return fetchRewritten(url);
+          }
+
+          if (url.origin === location.origin && url.pathname === '/data/index.json') {
+            url.searchParams.set('site-data', '13');
+            const request = typeof input === 'string'
+              ? nativeFetch(url.href, { ...init, cache: 'reload' })
+              : nativeFetch(new Request(url.href, input), { ...init, cache: 'reload' });
+            return request.then(async (response) => {
+              if (!response.ok) return response;
+              const dataIndex = await response.json();
+              if (dataIndex.games) dataIndex.games.baseUrl = `${location.origin}/game-v5`;
+              const headers = new Headers(response.headers);
+              headers.delete('content-length');
+              headers.delete('content-encoding');
+              return new Response(JSON.stringify(dataIndex), {
+                status: response.status,
+                statusText: response.statusText,
+                headers,
+              });
+            });
+          }
+
+          return nativeFetch(input, init);
+        };
+
+        // Keep enough detail to identify a failed runtime asset on browsers
+        // where the ScummVM error dialog only reports a non-200 response.
+        const nativeXhrOpen = XMLHttpRequest.prototype.open;
+        XMLHttpRequest.prototype.open = function(method, url, ...rest) {
+          const requestUrl = new URL(url, location.href);
+          if (requestUrl.origin === location.origin && requestUrl.pathname.startsWith('/data/')) {
+            requestUrl.pathname = siteBase.pathname + requestUrl.pathname.slice(1);
+            url = requestUrl.href;
+          }
+          this.__goblins3Url = String(url);
+          this.addEventListener('loadend', () => {
+            if (this.status >= 200 && this.status < 300) return;
+            const failedUrl = new URL(this.__goblins3Url, location.href);
+            lastHttpFailure = `${failedUrl.pathname} (HTTP ${this.status || 'network error'})`;
+            output.value += `Resource failed: ${lastHttpFailure}\n`;
+          }, { once: true });
+          return nativeXhrOpen.call(this, method, url, ...rest);
+        };
+
+        const notify = (type, text) => {
+          if (window.parent !== window) {
+            window.parent.postMessage({ source: 'goblins3-player', type, text }, parentOrigin);
+          }
+        };
+
+        const failStartup = (detail) => {
+          if (playerReady) return;
+          const message = String(detail || 'The game engine stopped during startup.');
+          statusText.textContent = message;
+          output.value += `Startup failed: ${message}\n`;
+          notify('error', message);
+        };
+        addEventListener('error', (event) => {
+          if (event.message) failStartup(event.message);
+        });
+        addEventListener('unhandledrejection', (event) => {
+          failStartup(event.reason?.message || event.reason);
+        });
+        notify('status', 'Loading the bundled game engine…');
+
+        const markReady = () => {
+          if (playerReady) return;
+          playerReady = true;
+          setTimeout(() => {
+            status.classList.add('hidden');
+            document.body.classList.add('ready');
+            document.getElementById('download-modal').style.display = 'none';
+            notify('ready', isCdEdition ? 'CD edition ready' : 'Demo ready');
+            document.title = isCdEdition
+              ? 'Goblins Quest 3 — DOS CD edition'
+              : 'Goblins Quest 3 — playable DOS demo';
+          }, 500);
+        };
+
+        const requestResult = (request) => new Promise((resolve, reject) => {
+          const timer = setTimeout(() => {
+            reject(new Error('Reading the local CD library timed out. Close the app and other game tabs, then retry. Your files have not been deleted.'));
+            try { request.transaction?.abort(); } catch (_) {}
+          }, 20000);
+          request.onsuccess = () => { clearTimeout(timer); resolve(request.result); };
+          request.onerror = () => { clearTimeout(timer); reject(request.error || new Error('Browser storage request failed.')); };
+        });
+
+        const openCdDatabase = () => new Promise((resolve, reject) => {
+          const request = indexedDB.open('goblins3-audio-test-cd-library', 1);
+          let settled = false;
+          const finish = (error) => {
+            if (settled) return;
+            settled = true;
+            clearTimeout(timer);
+            if (error) reject(error);
+            else {
+              request.result.onversionchange = () => request.result.close();
+              resolve(request.result);
+            }
+          };
+          const timer = setTimeout(() => finish(new Error('Opening local CD storage timed out. Close the app and other game tabs, then retry.')), 20000);
+          request.onsuccess = () => {
+            if (settled) request.result.close();
+            else finish();
+          };
+          request.onerror = () => finish(request.error || new Error('Could not open local CD storage.'));
+          request.onblocked = () => finish(new Error('Another game window is holding the CD library open. Close it and retry.'));
+        });
+
+        const getStoredRecord = (database, key) => requestResult(
+          database.transaction('files', 'readonly').objectStore('files').get(key),
+        );
+
+        const parseStoredFileKey = (libraryId, key) => {
+          if (typeof key !== 'string') return null;
+          const prefix = `${libraryId}:`;
+          if (!key.startsWith(prefix)) return null;
+          const storedPathAndChunk = key.slice(prefix.length);
+          const separator = storedPathAndChunk.lastIndexOf(':');
+          if (separator < 1) return null;
+          const chunkLabel = storedPathAndChunk.slice(separator + 1);
+          if (!/^\d{5}$/.test(chunkLabel)) return null;
+          return {
+            key,
+            path: storedPathAndChunk.slice(0, separator),
+            chunkIndex: Number(chunkLabel),
+          };
+        };
+
+        const loadCdFiles = async () => {
+          const database = await openCdDatabase();
+          try {
+            const metaTransaction = database.transaction('meta', 'readonly');
+            const metadata = await requestResult(
+              metaTransaction.objectStore('meta').get('active-library'),
+            );
+            if (!metadata) {
+              throw new Error('No CD edition is stored in this browser. Return to the page and import it first.');
+            }
+
+            const fileTransaction = database.transaction('files', 'readonly');
+            const storedKeys = await requestResult(
+              fileTransaction
+                .objectStore('files')
+                .index('libraryId')
+                .getAllKeys(IDBKeyRange.only(metadata.libraryId)),
+            );
+
+            const rootPrefix = metadata.root ? `${metadata.root}/` : '';
+            const filesByPath = new Map();
+            for (const storedKey of storedKeys) {
+              const parsed = parseStoredFileKey(metadata.libraryId, storedKey);
+              if (!parsed || (rootPrefix && !parsed.path.startsWith(rootPrefix))) continue;
+              // This WebAssembly runtime has Vorbis support but was built
+              // without a FLAC decoder. Do not spend another 114 MB of the
+              // iPhone's memory copying a track that ScummVM cannot play.
+              if (/(?:^|\/)track_?\d+\.f(?:la|lac)$/i.test(parsed.path)) continue;
+              if (!filesByPath.has(parsed.path)) filesByPath.set(parsed.path, []);
+              filesByPath.get(parsed.path).push(parsed);
+            }
+
+            const cdFiles = Array.from(filesByPath, ([path, chunks]) => ({
+              path,
+              chunks: chunks.sort((a, b) => a.chunkIndex - b.chunkIndex),
+            })).sort((a, b) => a.path.localeCompare(b.path));
+
+            if (!cdFiles.length) {
+              throw new Error('The stored CD library is empty. Please import it again.');
+            }
+
+            FS.mkdirTree(cdDirectory);
+            let loadedBytes = 0;
+            for (let index = 0; index < cdFiles.length; index += 1) {
+              const file = cdFiles[index];
+              const relativePath = rootPrefix ? file.path.slice(rootPrefix.length) : file.path;
+              if (!relativePath) continue;
+              const slash = relativePath.lastIndexOf('/');
+              if (slash >= 0) FS.mkdirTree(`${cdDirectory}/${relativePath.slice(0, slash)}`);
+
+              let expectedChunks = file.chunks.length;
+              let expectedSize = 0;
+              let storedSize = 0;
+              const stream = FS.open(`${cdDirectory}/${relativePath}`, 'w');
+              try {
+                for (let chunkIndex = 0; chunkIndex < file.chunks.length; chunkIndex += 1) {
+                  const chunk = file.chunks[chunkIndex];
+                  if (chunk.chunkIndex !== chunkIndex) {
+                    throw new Error(`The stored copy of ${relativePath} is out of order. Please import the ZIP again.`);
+                  }
+
+                  // Read one 4 MB record at a time. The old getAll() path
+                  // cloned the entire 200+ MB CD library into JavaScript and
+                  // then copied it again into WebAssembly memory, which put
+                  // mobile Safari under severe memory pressure.
+                  const record = await getStoredRecord(database, chunk.key);
+                  if (!record) {
+                    throw new Error(`The stored copy of ${relativePath} is incomplete. Please import the ZIP again.`);
+                  }
+                  if (chunkIndex === 0) {
+                    expectedChunks = record.chunkCount || 1;
+                    expectedSize = record.fileSize || record.size;
+                  }
+                  const data = record.data
+                    ? new Uint8Array(record.data)
+                    : new Uint8Array(await record.blob.arrayBuffer());
+                  FS.write(stream, data, 0, data.length, undefined);
+                  storedSize += data.length;
+                  loadedBytes += data.length;
+                  const fileProgress = (index + (chunkIndex + 1) / file.chunks.length) / cdFiles.length;
+                  const percent = Math.round(fileProgress * 78) + 10;
+                  const loadedMb = loadedBytes / (1024 * 1024);
+                  statusText.textContent = `Preparing CD files ${index + 1}/${cdFiles.length} · ${loadedMb.toFixed(0)} MB…`;
+                  progress.style.width = `${percent}%`;
+                  notify('status', `Preparing CD files ${index + 1}/${cdFiles.length}…`);
+                  await new Promise((resolve) => setTimeout(resolve, 0));
+                }
+              } finally {
+                FS.close(stream);
+              }
+
+              if (file.chunks.length !== expectedChunks || storedSize !== expectedSize) {
+                throw new Error(`The stored copy of ${relativePath} is incomplete. Please import the ZIP again.`);
+              }
+            }
+          } finally {
+            database.close();
+          }
+        };
+
+        const unlockAudio = async () => {
+          const contexts = [window.SDL2 && window.SDL2.audioContext, window.Module && window.Module.SDL2 && window.Module.SDL2.audioContext].filter(Boolean);
+          for (const context of contexts) {
+            if (context.state === 'suspended') await context.resume().catch(() => {});
+          }
+          canvas.focus({ preventScroll: true });
+        };
+
+        const sendPanPulse = () => {
+          if (!playerReady || !panDirection) return;
+
+          const rect = canvas.getBoundingClientRect();
+          // Goblins 3 only scrolls left when its logical mouse X is exactly
+          // zero. ScummVM letterboxes its 4:3 game surface inside the wider
+          // canvas, so the true game edge is not the canvas element's edge.
+          const gameAspect = 4 / 3;
+          const surfaceWidth = Math.min(canvas.width, canvas.height * gameAspect);
+          const surfaceLeft = rect.left
+            + ((canvas.width - surfaceWidth) / 2) * (rect.width / canvas.width);
+          const surfaceRight = surfaceLeft
+            + surfaceWidth * (rect.width / canvas.width);
+          const innerInset = Math.min(48, rect.width * 0.08);
+          const innerX = panDirection < 0
+            ? surfaceLeft + innerInset
+            : surfaceRight - 1 - innerInset;
+          const edgeX = panDirection < 0
+            ? surfaceLeft
+            : surfaceRight - 1;
+          const atEdge = panTick % 2 === 1;
+          const x = atEdge ? edgeX : innerX;
+          const y = rect.top + (rect.height * 0.36) + (panTick % 2 ? 8 : -8);
+          const pointerEvent = {
+            pointerType: 'mouse',
+            pointerId: 773,
+            button: -1,
+            buttons: 0,
+            type: 'pointermove',
+            movementX: atEdge ? panDirection * innerInset : -panDirection * innerInset,
+            movementY: panTick % 2 ? 16 : -16,
+            clientX: x,
+            clientY: y,
+          };
+
+          if (typeof canvas.sdlEventHandlerPointerGeneric === 'function') {
+            canvas.sdlEventHandlerPointerGeneric(pointerEvent);
+          } else if (typeof window.PointerEvent === 'function') {
+            canvas.dispatchEvent(new window.PointerEvent('pointermove', {
+              bubbles: true,
+              cancelable: true,
+              ...pointerEvent,
+            }));
+          }
+
+          lastPointer = { x, y };
+          panTick += 1;
+        };
+
+        const stopPan = () => {
+          if (panTimer) window.clearInterval(panTimer);
+          if (panStopTimer) window.clearTimeout(panStopTimer);
+          panTimer = 0;
+          panStopTimer = 0;
+          panDirection = 0;
+          document.querySelectorAll('.pan-control').forEach((button) => {
+            button.classList.remove('is-active');
+            button.setAttribute('aria-pressed', 'false');
+          });
+        };
+
+        const startPan = (direction, event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          stopPan();
+          unlockAudio();
+          panDirection = direction;
+          panTick = 0;
+          event.currentTarget.classList.add('is-active');
+          event.currentTarget.setAttribute('aria-pressed', 'true');
+          sendPanPulse();
+          panTimer = window.setInterval(sendPanPulse, 24);
+          // A tap launches a complete pan burst. This deliberately survives
+          // iOS pointerup/pointercancel, which can arrive immediately after a
+          // button press and previously stopped the loop after one pulse.
+          panStopTimer = window.setTimeout(stopPan, 1600);
+        };
+
+        document.addEventListener('contextmenu', (event) => event.preventDefault());
+        document.addEventListener('selectstart', (event) => event.preventDefault());
+        document.addEventListener('gesturestart', (event) => event.preventDefault(), { passive: false });
+        canvas.addEventListener('pointermove', (event) => {
+          lastPointer = { x: event.clientX, y: event.clientY };
+        }, { passive: true });
+
+        canvas.addEventListener('touchstart', (event) => {
+          unlockAudio();
+          if (event.touches.length) {
+            const touch = event.touches[0];
+            lastPointer = { x: touch.clientX, y: touch.clientY };
+          }
+          event.preventDefault();
+        }, { passive: false, capture: true });
+
+        canvas.addEventListener('touchmove', (event) => {
+          if (event.touches.length) {
+            const touch = event.touches[0];
+            lastPointer = { x: touch.clientX, y: touch.clientY };
+          }
+          event.preventDefault();
+        }, { passive: false, capture: true });
+        canvas.addEventListener('touchend', (event) => event.preventDefault(), { passive: false, capture: true });
+        canvas.addEventListener('touchcancel', (event) => event.preventDefault(), { passive: false, capture: true });
+
+        document.getElementById('pan-left').addEventListener('pointerdown', (event) => startPan(-1, event));
+        document.getElementById('pan-right').addEventListener('pointerdown', (event) => startPan(1, event));
+        canvas.addEventListener('pointerdown', stopPan, true);
+        document.addEventListener('visibilitychange', () => {
+          if (document.hidden) stopPan();
+        });
+
+        document.getElementById('sound').addEventListener('click', unlockAudio);
+        const fullscreenButton = document.getElementById('fullscreen');
+        fullscreenButton.addEventListener('click', async () => {
+          if (window.parent !== window) {
+            const parentCabinet = window.frameElement?.closest?.('.cabinet-shell');
+            if (fullscreenButton.textContent !== 'Exit') {
+              const nativeFullscreen = parentCabinet?.requestFullscreen?.();
+              notify('toggle-fullscreen', '');
+              await nativeFullscreen?.catch(() => {});
+            } else {
+              notify('toggle-fullscreen', '');
+            }
+          } else {
+            await document.documentElement.requestFullscreen?.().catch(() => {});
+          }
+          unlockAudio();
+        });
+
+        addEventListener('message', (event) => {
+          if (event.origin !== location.origin || event.data?.source !== 'goblins3-shell') return;
+          if (event.data.type === 'fullscreen-state') {
+            fullscreenButton.textContent = event.data.expanded ? 'Exit' : 'Full screen';
+          }
+          if (event.data.type === 'display-mode') {
+            document.documentElement.classList.toggle('standalone', Boolean(event.data.standalone));
+          }
+          if (event.data.type === 'viewport-change') {
+            for (const delay of [0, 80, 220]) {
+              setTimeout(() => dispatchEvent(new Event('resize')), delay);
+            }
+          }
+        });
+
+        window.Module = {
+          preRun: [() => {
+            const dependency = isCdEdition ? 'preload-gob3-cd' : 'preload-gob3-demo';
+            addRunDependency(dependency);
+
+            (async () => {
+              FS.writeFile('/goblins3-web.ini', new TextEncoder().encode(fixedConfig));
+              if (isCdEdition) {
+                statusText.textContent = 'Opening your local CD edition…';
+                notify('status', 'Opening your local CD edition…');
+                await loadCdFiles();
+                return;
+              }
+
+              FS.mkdirTree(demoDirectory);
+
+              for (let index = 0; index < demoFiles.length; index += 1) {
+                const filename = demoFiles[index];
+                const percent = Math.round(((index + 1) / demoFiles.length) * 72) + 12;
+                statusText.textContent = `Loading demo files ${index + 1}/${demoFiles.length}…`;
+                progress.style.width = `${percent}%`;
+                notify('status', `Loading demo files ${index + 1}/${demoFiles.length}…`);
+
+                const response = await nativeFetch(
+                  `/game-v5/gob3-dos-demo-en/${encodeURIComponent(filename)}`,
+                  { cache: 'reload' },
+                );
+                if (!response.ok) {
+                  throw new Error(`${filename}: HTTP ${response.status}`);
+                }
+
+                FS.writeFile(`${demoDirectory}/${filename}`, new Uint8Array(await response.arrayBuffer()));
+              }
+            })()
+              .then(() => removeRunDependency(dependency))
+              .catch((error) => {
+                const detail = error instanceof Error ? error.message : String(error);
+                const prefix = isCdEdition ? 'CD launch failed' : 'Demo download failed';
+                statusText.textContent = `${prefix}: ${detail}`;
+                failStartup(`${prefix}: ${detail}`);
+                console.error('Goblins 3 preload failed:', error);
+              });
+          }],
+          postRun: [markReady],
+          print(text) {
+            if (!text) return;
+            output.value += text + '\n';
+            if (/Running Goblins Quest 3/i.test(text)) {
+              statusText.textContent = 'Starting Goblins Quest 3…';
+              progress.style.width = '96%';
+              markReady();
+            }
+          },
+          printErr(text) {
+            if (!text) return;
+            console.error(text);
+            output.value += text + '\n';
+            if (/HttpReadStream|HTTP response is not 200 OK/i.test(text)) {
+              const detail = lastHttpFailure || String(text);
+              statusText.textContent = `Resource error: ${detail}`;
+              notify('status', `Resource error: ${detail}`);
+            }
+          },
+          canvas,
+          onAbort(reason) {
+            failStartup(`Game engine startup failed: ${String(reason)}`);
+          },
+          setStatus(text) {
+            if (!text) return;
+            const clean = String(text).replace(/\([^)]*\)/g, '').trim();
+            statusText.textContent = clean || 'Loading…';
+            const match = String(text).match(/(\d+)\/(\d+)/);
+            if (match) progress.style.width = Math.max(12, Math.round((Number(match[1]) / Number(match[2])) * 88)) + '%';
+            notify('status', clean || 'Loading…');
+          },
+          onRuntimeInitialized() {
+            if (typeof window.httpHideProgressBar === 'function') window.httpHideProgressBar();
+          },
+          totalDependencies: 0,
+          monitorRunDependencies(left) {
+            this.totalDependencies = Math.max(this.totalDependencies, left);
+            const done = this.totalDependencies ? (this.totalDependencies - left) / this.totalDependencies : 0;
+            progress.style.width = Math.max(12, Math.round(done * 88)) + '%';
+          },
+          locateFile(path) {
+            if (path === 'scummvm.wasm') {
+              return runtimeBase + 'scummvm.wasm';
+            }
+            const dataPath = path.indexOf('/data/');
+            if (dataPath >= 0) return path.slice(dataPath);
+            return runtimeBase + path;
+          }
+        };
+
+        const script = document.createElement('script');
+        script.src = runtimeBase + 'scummvm.js' + (reloadEngine ? `?reload=${playerOptions.get('launch')}` : '');
+        script.async = true;
+        script.onerror = () => {
+          failStartup('The bundled game engine could not be loaded. Check your connection and retry.');
+        };
+        document.body.appendChild(script);
+      })();
+    </script>
+  </body>
+</html>

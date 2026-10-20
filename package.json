@@ -1,0 +1,7 @@
+{
+  "name": "goblins3-audio-test",
+  "private": true,
+  "type": "module",
+  "scripts": {"build":"node scripts/build.mjs","test":"node --test scripts/test.mjs","preview":"node scripts/serve.mjs"},
+  "devDependencies": {"typescript":"5.9.3","fflate":"0.7.5"}
+}

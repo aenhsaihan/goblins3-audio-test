@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="G3 Audio Test">
+  <meta name="theme-color" content="#0e0b09">
+  <meta name="robots" content="noindex,nofollow">
+  <title>Goblins 3 — isolated CD audio test</title>
+  <link rel="stylesheet" href="./style.css">
+</head>
+<body>
+<main id="setup">
+  <p class="eyebrow">SEPARATE TEST BUILD · 24</p>
+  <h1>Goblins 3<br><span>CD audio test</span></h1>
+  <p class="intro">Try the intro, Blount’s speech and Wynona’s dialogue with the measured audio-timing fix.</p>
+  <p class="notice">Your working site is unchanged. This address has separate CD storage and saves. Import your CD ZIP here once; nothing is uploaded.</p>
+  <section aria-labelledby="cd-title">
+    <h2 id="cd-title">Your CD edition</h2>
+    <p id="library">Checking this device…</p>
+    <label class="import-button">Import CD ZIP<input id="zip" type="file" accept=".zip,application/zip"></label>
+    <label class="import-button secondary">Import folder<input id="folder" type="file" webkitdirectory multiple></label>
+    <progress id="progress" max="100" value="0" hidden></progress>
+    <p id="status" role="status" aria-live="polite"></p>
+    <p id="error" role="alert"></p>
+    <div class="actions">
+      <button id="candidate" disabled>Play audio fix</button>
+      <button id="baseline" class="secondary" disabled>Compare original timing</button>
+      <button id="continue" class="secondary" hidden>Continue running game</button>
+    </div>
+  </section>
+  <section>
+    <h2>What to check</h2>
+    <ol><li>Let the animated intro play without skipping. Listen for crackling and growing delay.</li><li>Try Blount’s and Wynona’s spoken cutscenes. Do voices finish and match the animation?</li><li>Check taps, camera panning and save/load still feel normal.</li></ol>
+    <p>Both timing versions use this test site’s imported files and saves. Switching versions restarts the game, so save first.</p>
+    <p>On iPhone, use Safari → Share → Add to Home Screen, then rotate to landscape. The test’s home-screen icon is separate from the working game.</p>
+  </section>
+  <footer><a href="https://goblins-3-web.blackbrush12.chatgpt.site/" target="_blank" rel="noopener">Open unchanged working site</a><p>No game or demo assets are hosted here. Supply your own legally acquired DOS CD files. Experimental, not a replacement release.</p></footer>
+</main>
+<div id="game" hidden><iframe id="player" title="Goblins Quest 3 CD test player" allow="autoplay; fullscreen; midi" allowfullscreen></iframe><button id="menu" aria-label="Return to test menu">Test menu</button></div>
+<script type="module" src="./shell.js"></script>
+</body>
+</html>

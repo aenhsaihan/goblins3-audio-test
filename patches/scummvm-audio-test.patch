@@ -1,0 +1,101 @@
+diff --git a/backends/graphics/openglsdl/openglsdl-graphics.cpp b/backends/graphics/openglsdl/openglsdl-graphics.cpp
+index b2121460..ca0e0ddb 100644
+--- a/backends/graphics/openglsdl/openglsdl-graphics.cpp
++++ b/backends/graphics/openglsdl/openglsdl-graphics.cpp
+@@ -991,7 +991,11 @@ bool OpenGLSdlGraphicsManager::setupMode(uint width, uint height) {
+ 		SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, _glContextMinor);
+ 
+ #if SDL_VERSION_ATLEAST(3, 0, 0)
++#ifdef EMSCRIPTEN
++		uint32 flags = SDL_WINDOW_OPENGL;
++#else
+ 		uint32 flags = SDL_WINDOW_OPENGL | SDL_WINDOW_HIGH_PIXEL_DENSITY;
++#endif
+ #else
+ 		uint32 flags = SDL_WINDOW_OPENGL | SDL_WINDOW_ALLOW_HIGHDPI;
+ #endif
+diff --git a/backends/mixer/emscriptensdl/emscriptensdl-mixer.cpp b/backends/mixer/emscriptensdl/emscriptensdl-mixer.cpp
+index 35f1152b..6073ba78 100644
+--- a/backends/mixer/emscriptensdl/emscriptensdl-mixer.cpp
++++ b/backends/mixer/emscriptensdl/emscriptensdl-mixer.cpp
+@@ -23,6 +23,8 @@
+ 
+ #if defined(SDL_BACKEND) && defined(__EMSCRIPTEN__)
+ 
++#include <emscripten/em_asm.h>
++
+ #include "backends/mixer/emscriptensdl/emscriptensdl-mixer.h"
+ #include "common/debug.h"
+ #include "common/system.h"
+@@ -117,6 +119,7 @@ void EmscriptenSdlMixerManager::emscriptenSdl3Callback(void *userdata, SDL_Audio
+ 	// suspend again (e.g. waiting for HTTP game data) and corrupt the
+ 	// suspended main stack, and during playback it consumes recorded events.
+ 	const Uint64 now = SDL_GetTicks();
++	EM_ASM({ if (Module.audioTrace && Module.audioTrace.length < 50000) Module.audioTrace.push([performance.now(), 1, $0, $1]); }, manager->_dataBuffers->size(), additional_amount);
+ 
+ 	if (manager->_dataBuffers->size() > 0) {
+ 		// Put the data into the stream
+@@ -141,6 +144,7 @@ void EmscriptenSdlMixerManager::updateMixer(void *refCon) {
+ #if SDL_VERSION_ATLEAST(3, 0, 0)
+ 	static int fullBufferCount = 0;
+ 	static uint lastFullBufferPrint = 0;
++	EM_ASM({ if (Module.audioTrace && Module.audioTrace.length < 50000) Module.audioTrace.push([performance.now(), 2, $0, $1]); }, manager->_dataBuffers->size(), manager->_lastRequestedAmount);
+ 	if (manager->_dataBuffers->size() < 2) {
+ 		int amount = manager->_lastRequestedAmount > 0 ? manager->_lastRequestedAmount : 8 * 1024;
+ 		if (manager->_stream) {
+diff --git a/backends/platform/sdl/emscripten/emscripten.cpp b/backends/platform/sdl/emscripten/emscripten.cpp
+index 7651cd46..c0c12700 100644
+--- a/backends/platform/sdl/emscripten/emscripten.cpp
++++ b/backends/platform/sdl/emscripten/emscripten.cpp
+@@ -203,10 +203,27 @@ void OSystem_Emscripten::applyBackendSettings() {
+ }
+ 
+ void OSystem_Emscripten::delayMillis(uint msecs) {
++	EM_ASM({ if (Module.audioTrace && Module.audioTrace.length < 50000) Module.audioTrace.push([performance.now(), 3, $0]); }, msecs);
+ 	static uint32 lastSleep = 0;
+ 	if (msecs == 0 && getMillis() - lastSleep < 20) {
+ 		return;
+ 	}
++	// Local A/B experiment only: maintain the requested wall-clock wait,
++	// but allow the cooperative audio timer to refill during long waits.
++	static const bool serviceDuringWait = EM_ASM_INT({
++		return new URLSearchParams(location.search).get('service_timers') === '1';
++	});
++	if (serviceDuringWait) {
++		const uint32 started = getMillis();
++		uint32 elapsed = 0;
++		do {
++			SDL_Delay(MIN<uint32>(10, msecs > elapsed ? msecs - elapsed : 0));
++			((EmscriptenTimerManager *)_timerManager)->checkTimers();
++			elapsed = getMillis() - started;
++		} while (elapsed < msecs);
++		lastSleep = getMillis();
++		return;
++	}
+ #ifdef ENABLE_EVENTRECORDER
+ 	// The recorder suppresses real delays for deterministic timing, but on
+ 	// Emscripten SDL_Delay is the asyncify suspend point — never yielding
+diff --git a/video/coktel_decoder.cpp b/video/coktel_decoder.cpp
+index 57096a58..e986c4f4 100644
+--- a/video/coktel_decoder.cpp
++++ b/video/coktel_decoder.cpp
+@@ -26,6 +26,10 @@
+  */
+ 
+ #include "common/scummsys.h"
++
++#ifdef __EMSCRIPTEN__
++#include <emscripten/em_asm.h>
++#endif
+ #include "common/rect.h"
+ #include "common/endian.h"
+ #include "common/stream.h"
+@@ -1304,6 +1308,9 @@ const Graphics::Surface *IMDDecoder::decodeNextFrame() {
+ 
+ void IMDDecoder::processFrame() {
+ 	_curFrame++;
++#ifdef __EMSCRIPTEN__
++	EM_ASM({ if (Module.audioTrace && Module.audioTrace.length < 50000) Module.audioTrace.push([performance.now(), 4, $0, $1, $2, $3]); }, _curFrame, _frameCount, _width, _height);
++#endif
+ 
+ 	_dirtyRects.clear();
